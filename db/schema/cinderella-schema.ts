@@ -7,15 +7,12 @@
  *   - auctionsTable
  *   - bidsTable
  *   - tradesTable
- *   - scoresTable (Step 5)
+ *   - scoresTable
  *
  * @purpose
  *   - Provide schema definitions for all core gameplay mechanics in Cinderella Bounty.
- *   - The new scoresTable tracks each user's current score in a separate table.
- *
- * @notes
- *   - This approach avoids cluttering the profilesTable with game-specific data.
- *   - If a user doesn't play Cinderella Bounty, they might not have a row here (or we can create it on sign-up).
+ *   - We keep numeric(...) columns as strings in Drizzle to avoid "transform is not a function."
+ *   - After editing, re-run `npm run db:generate && npm run db:migrate` to update definitions.
  */
 
 import {
@@ -29,9 +26,9 @@ import {
 } from "drizzle-orm/pg-core"
 import { profilesTable } from "@/db/schema/profiles-schema"
 
-// ======================================================================
-//  1. TEAMS & PICKS
-// ======================================================================
+// ---------------------------------------------------------------------
+// 1. TEAMS & PICKS
+// ---------------------------------------------------------------------
 export const pickTypeEnum = pgEnum("pick_type", ["cinderella", "favorite"])
 
 export const teamsTable = pgTable("teams", {
@@ -72,9 +69,9 @@ export const picksTable = pgTable("picks", {
 export type InsertPick = typeof picksTable.$inferInsert
 export type SelectPick = typeof picksTable.$inferSelect
 
-// ======================================================================
-//  2. AUCTIONS, BIDS, TRADES
-// ======================================================================
+// ---------------------------------------------------------------------
+// 2. AUCTIONS, BIDS, TRADES
+// ---------------------------------------------------------------------
 export const auctionStatusEnum = pgEnum("auction_status", [
   "scheduled",
   "open",
@@ -93,7 +90,10 @@ export const auctionsTable = pgTable("auctions", {
 
   status: auctionStatusEnum("status").notNull().default("scheduled"),
 
+  // Drizzle sees this as string (because no transform/parse).
+  // The DB column is numeric(10,2).
   finalBidAmount: numeric("final_bid_amount", { precision: 10, scale: 2 }),
+
   winnerUserId: text("winner_user_id").references(() => profilesTable.userId),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -117,7 +117,9 @@ export const bidsTable = pgTable("bids", {
     .notNull()
     .references(() => profilesTable.userId, { onDelete: "cascade" }),
 
+  // Also a string in Drizzle, numeric(10,2) in DB
   amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+
   createdAt: timestamp("created_at").defaultNow().notNull()
 })
 
@@ -150,6 +152,7 @@ export const tradesTable = pgTable("trades", {
     .notNull()
     .references(() => teamsTable.id, { onDelete: "cascade" }),
 
+  // Also a string, numeric(10,2) in DB
   cashAmount: numeric("cash_amount", { precision: 10, scale: 2 }).default("0"),
 
   status: tradeStatusEnum("status").notNull().default("pending"),
@@ -164,24 +167,9 @@ export const tradesTable = pgTable("trades", {
 export type InsertTrade = typeof tradesTable.$inferInsert
 export type SelectTrade = typeof tradesTable.$inferSelect
 
-// ======================================================================
-//  3. SCORES (Step 5)
-// ======================================================================
-/**
- * @table scoresTable
- * @description
- *   Stores each user's current score for the Cinderella Bounty tournament.
- *   This allows us to keep the game logic separate from the base profiles table.
- *
- * @fields
- *   - userId: references profilesTable.userId (unique primary key if we want 1:1 with user)
- *   - currentScore: integer representing the user's current accumulated points
- *   - createdAt, updatedAt: timestamps for tracking creation and updates
- *
- * @usage
- *   - Insert a row when a user first participates.
- *   - Update currentScore after each game result or trade logic.
- */
+// ---------------------------------------------------------------------
+// 3. SCORES
+// ---------------------------------------------------------------------
 export const scoresTable = pgTable("scores", {
   userId: text("user_id")
     .primaryKey()
@@ -197,14 +185,5 @@ export const scoresTable = pgTable("scores", {
     .$onUpdate(() => new Date())
 })
 
-/**
- * @type InsertScore
- *   - For inserting a new score record when user first participates
- */
 export type InsertScore = typeof scoresTable.$inferInsert
-
-/**
- * @type SelectScore
- *   - For reading an existing score record from the database
- */
 export type SelectScore = typeof scoresTable.$inferSelect
